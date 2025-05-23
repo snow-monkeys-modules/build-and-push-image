@@ -1,0 +1,126 @@
+name: Deploy in cluster kubernetes
+
+on:
+  workflow_call:
+    inputs:
+      registry:
+        required: false
+        type: string
+        default: docker.io
+      name:
+        required: false
+        type: string
+        default: ''
+      tag:
+        required: false
+        type: string
+        default: latest
+      platforms:
+        required: false
+        type: string
+        default: linux/amd64,linux/arm64,linux/arm64/v8
+      test-container:
+        required: false
+        type: boolean
+        default: true
+    secrets:
+      registry-user:
+        required: false
+      registry-token:
+        required: false
+      snow-token:
+        required: false
+    
+   
+jobs:
+
+  notify-snow-monkeys-dashboard: 
+    runs-on: ubuntu-22.04
+    
+    steps:
+
+      - uses: actions/checkout@v4
+
+      # pending... loging to different registries: 
+      # - GitHub (ghcr.io)
+      # - GitLab (registry.gitlab.com)
+      # - Azure (<registry-name>.azurecr.io)
+      # - AWS Public Elastic Container Registry (public.ecr.aws)
+      # - AWS Elastic Container Registry (<aws-account-number>.dkr.ecr.<region>.amazonaws.com)
+      # - Google Container Registry (gcr.io)  - need extra authentication
+      # - Google Artifact Registry (<location>-docker.pkg.dev)  - need extra authentication
+      # https://github.com/docker/login-action
+
+      # login to registry
+      - name: 1. Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ inputs.registry }}
+          username: ${{ secrets.registry-user }}
+          password: ${{ secrets.registry-token }}
+
+      # setup QEMU
+      - name: 5. Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      # setup Buildx
+      - name: 6. Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          platforms: ${{ inputs.platforms }}
+          
+
+      # build test image to ensure that the container is working properly
+      # in all platforms. condition: if the test-container input flag is true
+      - name: 7.1 Build and push for test image
+        uses: docker/build-push-action@v6
+        if: ${{ inputs.test-container }}
+        with:
+          load: true
+          tags: |
+            ${{ secrets.user }}/test-${{ github.event.repository.name }}-img:latest
+      
+      # test image to ensure that the container is working properly
+      # in all platforms. condition: if the test-container input flag is true
+      - name: 7.1 Test image
+        if: ${{ inputs.test-container }}
+        run: |
+          docker run --rm ${{ secrets.user }}/test-${{ github.event.repository.name }}-img:latest
+          sleep 5
+
+      # echo message if the test-container input flag is false
+      - name: 7.2 No testing action required
+        if: ${{ ! inputs.test-container }}
+        run: |
+          echo "no testing action required"
+
+      # build dev image to ensure that the container is working properly
+      # in all platforms. condition: if the image-name input flag is empty string
+      # and if default name is the same as the repository name
+      - name: 8.1 Build and push
+        uses: docker/build-push-action@v6
+        if: ${{ inputs.name == '' }}
+        with:
+          push: true
+          platforms: ${{ inputs.platforms }}
+          tags: |
+            ${{ secrets.user }}/${{ github.event.repository.name }}-img:${{ inputs.tag }}
+            ${{ secrets.user }}/${{ github.event.repository.name }}-img:latest
+      
+      # build dev image to ensure that the container is working properly
+      # in all platforms. condition: if the image-name input flag is not empty string
+      # and image name is the same as the input image-name
+      - name: 8.2 Build and push
+        uses: docker/build-push-action@v6
+        if: ${{ ! inputs.name == '' }}
+        with:
+          push: true
+          platforms: ${{ inputs.platforms }}
+          tags: |
+            ${{ inputs.name }}:${{ inputs.tag}}
+            ${{ inputs.name }}:latest
+
+      # pending send build to MacMini M4
+      # default setting in registry if you want the image public or private
+
+     
