@@ -1,4 +1,4 @@
-name: Deploy in cluster kubernetes
+name: Build and push container image
 
 on:
   workflow_call:
