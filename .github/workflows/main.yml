@@ -22,7 +22,7 @@ on:
       test-container:
         required: false
         type: boolean
-        default: true
+        default: false
     secrets:
       registry-user:
         required: false
